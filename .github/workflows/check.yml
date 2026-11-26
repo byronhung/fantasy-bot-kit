@@ -1,0 +1,60 @@
+name: pre-game check
+# 23:00 UTC = 07:00 Manila, ~1 h before the first tip-off. Pushes only if a starter
+# is out / questionable tonight or a bench player should swap in.
+# With the Cloudflare timer (repo variable CF_TIMER = on), the Worker in cloudflare/ starts it
+# on time and GitHub's own schedule is skipped. Without it, GitHub's schedule runs it, often
+# late; a run that lands after tip-off skips itself.
+
+on:
+  schedule:
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    if: github.event_name != 'schedule' || vars.CF_TIMER != 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Skip a late fallback run
+        id: gate
+        run: |
+          h=$(date -u +%H)
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$h" -ge 0 ] && [ "$h" -lt 22 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "Too late for a pre-game check."
+          fi
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.skip != 'true'
+      - uses: astral-sh/setup-uv@v6
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          python-version: "3.12"
+      - name: Install
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          uv sync
+          uv run playwright install --with-deps chromium
+      - name: Check lineups
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          YAHOO_STATE: ${{ secrets.YAHOO_STATE }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          REPORT_URL: ${{ secrets.REPORT_URL }}
+          FBOT_LEAGUES: ${{ vars.LEAGUES }}
+          PYTHONIOENCODING: utf-8
+        run: uv run python -m fantasy_bot.run --mode check
+      - name: Push a failure notice
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          curl -s -H "Title: Fantasy bot: pre-game check failed" -H "Tags: warning" \
+            -H "Click: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d "Lineup check didn't run. Check your lineups in Yahoo yourself today." "https://ntfy.sh/$NTFY_TOPIC"
+      - name: Save Yahoo snapshots (failed runs only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots-${{ github.run_id }}
+          path: data/raw/
+          retention-days: 7

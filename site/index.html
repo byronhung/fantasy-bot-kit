@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fantasy Matchups</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --court: #e9eef5; --panel: #ffffff; --line: #d3dbe6; --ink: #13233a; --muted: #5d6f88;
+  --me: #138a7e; --opp: #c2416f; --led: #b57600; --chip: #edf1f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --court: #12223a; --panel: #1a2e4c; --line: #2b4366; --ink: #eef3fa; --muted: #93a6c2;
+    --me: #3fc2b3; --opp: #e9679a; --led: #f5b83d; --chip: #233b5f;
+  }
+}
+:root[data-theme="dark"] {
+  --court: #12223a; --panel: #1a2e4c; --line: #2b4366; --ink: #eef3fa; --muted: #93a6c2;
+  --me: #3fc2b3; --opp: #e9679a; --led: #f5b83d; --chip: #233b5f;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--court); color: var(--ink);
+  font: 16px/1.45 "Barlow", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+}
+.num, h1, h2, .tab { font-family: "Barlow Condensed", "Barlow", sans-serif; }
+main { max-width: 560px; margin: 0 auto; padding: 16px 16px 48px; }
+header.top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+header.top h1 { font-size: 1.35rem; font-weight: 600; margin: 0; letter-spacing: .01em; }
+.stamp { color: var(--muted); font-size: .85rem; }
+
+.tabs { display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+.tab { flex: 1; border: 0; background: transparent; color: var(--muted); font-size: 1.05rem;
+  font-weight: 600; padding: 8px 6px; border-radius: 9px; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--chip); color: var(--ink); }
+.tab .tw { color: var(--led); margin-left: 6px; }
+button:focus-visible, summary:focus-visible { outline: 2px solid var(--led); outline-offset: 2px; }
+
+.board { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+.head { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: end; }
+.teams { font-size: 1rem; color: var(--muted); }
+.teams b { color: var(--ink); font-weight: 600; }
+.score { font-size: 2.6rem; font-weight: 700; line-height: 1; margin-top: 4px; }
+.score .d { color: var(--muted); padding: 0 2px; }
+.win { text-align: right; }
+.win .pct { font-size: 3.4rem; font-weight: 700; line-height: .9; color: var(--led);
+  font-variant-numeric: tabular-nums; }
+.win small { display: block; color: var(--muted); font-size: .85rem; }
+.facts { grid-column: 1 / -1; color: var(--muted); font-size: .9rem; margin-top: 8px; }
+.dead { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--chip); font-size: .92rem; }
+
+.legend { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted);
+  margin: 18px 0 6px; }
+.legend .y { color: var(--me); font-weight: 600; } .legend .t { color: var(--opp); font-weight: 600; }
+.cat { display: grid; grid-template-columns: 3.2rem 3.6rem 1fr 3.6rem 2.6rem; align-items: center;
+  gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.cat .n { font-weight: 600; font-family: "Barlow Condensed", sans-serif; font-size: 1.05rem; }
+.cat .v { font-size: .92rem; text-align: right; }
+.cat .v.o { text-align: left; }
+.cat .p { text-align: right; font-weight: 600; font-family: "Barlow Condensed", sans-serif; font-size: 1.05rem; }
+.rope { position: relative; height: 10px; border-radius: 5px; background: var(--chip); }
+.rope::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px;
+  background: var(--muted); opacity: .5; transform: translateX(-1px); }
+.rope i { position: absolute; top: 0; bottom: 0; border-radius: 5px; }
+.rope i.me { right: 50%; background: var(--me); }
+.rope i.opp { left: 50%; background: var(--opp); }
+.cat.locked .n { color: var(--me); } .cat.lost .n { color: var(--opp); }
+
+h2 { font-size: 1.25rem; font-weight: 600; margin: 22px 0 8px; }
+h2 .sub { font-family: "Barlow", sans-serif; font-size: .85rem; font-weight: 400; color: var(--muted); margin-left: 6px; }
+.move { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; background: var(--panel); }
+.swap { display: grid; grid-template-columns: 1.4rem 1fr; row-gap: 2px; }
+.swap .s { font-weight: 700; font-size: 1.2rem; line-height: 1.3; }
+.swap .add { color: var(--me); } .swap .drop { color: var(--opp); }
+.swap .who { font-weight: 600; font-size: 1.05rem; }
+.swap .who span { font-weight: 400; color: var(--muted); font-size: .9rem; margin-left: 4px; }
+.gain { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.gain .num { font-size: 1.5rem; font-weight: 700; }
+.gain .num .to { color: var(--led); }
+.chip { font-size: .8rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--chip); }
+details { margin-top: 10px; font-size: .9rem; color: var(--muted); }
+summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+details p { margin: 6px 0 0; }
+
+ul.plain { list-style: none; margin: 0; padding: 0; }
+ul.plain li { padding: 8px 0; border-top: 1px solid var(--line); font-size: .95rem; }
+ul.plain li:first-child { border-top: 0; }
+.st { font-weight: 600; } .st.out { color: var(--opp); } .st.dtd { color: var(--led); }
+.when { color: var(--muted); font-size: .85rem; margin-left: 4px; }
+.hold { color: var(--muted); font-size: .95rem; padding: 4px 0; }
+.empty { text-align: center; color: var(--muted); padding: 48px 16px; }
+@media (max-width: 380px) {
+  .cat { grid-template-columns: 2.8rem 3rem 1fr 3rem 2.4rem; gap: 6px; }
+  .win .pct { font-size: 2.8rem; } .score { font-size: 2.2rem; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Fantasy matchups</h1>
+    <span class="stamp" id="stamp"></span>
+  </header>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <section id="view"><p class="empty">Loading today's report…</p></section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pct = (x) => Math.round(x * 100) + "%";
+const val = (cat, x) => (cat === "FG%" || cat === "FT%") ? x.toFixed(3).replace(/^0/, "") : Math.round(x);
+const day = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" }) : "";
+const CAT_NAMES = { "3PTM": "3PM", ST: "STL" };
+
+function rope(c) {
+  // TO: lower wins, but p is already "chance you win the category".
+  const lean = (c.p - 0.5) * 2;               // -1 .. 1
+  const w = Math.min(50, Math.abs(lean) * 50);
+  return `<div class="rope" role="img" aria-label="${pct(c.p)} chance you win ${esc(c.cat)}">` +
+    (lean >= 0 ? `<i class="me" style="width:${w}%"></i>` : `<i class="opp" style="width:${w}%"></i>`) + `</div>`;
+}
+
+function moveCard(m, mode) {
+  const a = m.add, d = m.drop;
+  const when = mode === "next_week"
+    ? (typeof m.next_in === "number" && m.next_in % 1 === 0 ? `${m.next_in} games next week` : "next week's schedule not out yet")
+    : `${a.games} games left` + (a.waiver_clears ? `, on waivers until ${day(a.waiver_clears)}` : a.first_game ? `, first ${day(a.first_game)}` : "");
+  const pg = a.per_game;
+  const line = `${pg.PTS} pts, ${pg.REB} reb, ${pg.AST} ast, ${pg.ST} stl, ${pg.BLK} blk, ${pg["3PTM"]} 3pm, ${pg.TO} to` +
+    (a.fg != null ? `, ${pct(a.fg)} FG` : "") + (a.ft != null ? `, ${pct(a.ft)} FT` : "");
+  const gain = mode === "next_week"
+    ? `<div class="gain"><span class="chip">Per-game value ${m.value_in} vs ${m.value_out}</span>` +
+      `<span class="chip">Long-term ${m.lt_in.toFixed(2)} vs ${m.lt_out.toFixed(2)}</span></div>` :
+    `<div class="gain"><span class="num">${pct(m.win_before)} <span class="to">to ${pct(m.win_after)}</span></span>` +
+    m.flipped.map((c) => `<span class="chip">${esc(CAT_NAMES[c] || c)}</span>`).join("") + `</div>`;
+  const lt = d ? `<p>Long-term value ${m.lt_in.toFixed(2)} vs ${m.lt_out.toFixed(2)} for ${esc(d.name)}` +
+    (mode === "next_week" ? "." : ` (counts at weight ${m.weight}). Move score ${m.score > 0 ? "+" : ""}${pct(m.score)}.`) + `</p>` : "";
+  const stream = m.kind === "stream" ? `<p>Streaming pickup: worse long-term than who you drop.</p>` : "";
+  const back = (p) => p && p.teammate_back ? `<p>${esc(p.name)}'s recent numbers came while ${esc(p.teammate_back.join(" & "))} sat out, so he's projected closer to his season form.</p>` : "";
+  return `<article class="move">
+    <div class="swap">
+      <span class="s add" aria-label="add">+</span><span class="who">${esc(a.name)}<span>${esc(a.team)} ${esc(a.pos)}</span></span>
+      ${d ? `<span class="s drop" aria-label="drop">−</span><span class="who">${esc(d.name)}<span>${esc(d.team)}</span></span>` : ""}
+    </div>
+    ${gain}
+    <details><summary>Why</summary><p>${esc(when)}.</p><p>Per game: ${esc(line)}.</p>${lt}${stream}${back(a)}${back(d)}</details>
+  </article>`;
+}
+
+function injuryItem(n) {
+  if (typeof n === "string") return `<li>${esc(n)}</li>`;
+  const cls = n.status === "Out" ? "out" : "dtd";
+  const date = n.date ? new Date(n.date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+  return `<li><b>${esc(n.name)}</b> <span class="st ${cls}">${esc(n.status)}</span><span class="when">${esc(date)}</span><br>${esc(n.text)}</li>`;
+}
+
+function league(L) {
+  const cats = L.cats.map((c) => `<div class="cat ${c.label}">
+      <span class="n">${esc(CAT_NAMES[c.cat] || c.cat)}</span>
+      <span class="v">${val(c.cat, c.me)}</span>${rope(c)}<span class="v o">${val(c.cat, c.opp)}</span>
+      <span class="p">${pct(c.p)}</span></div>`).join("");
+  const moves = L.moves.length ? L.moves.map((m) => moveCard(m, L.mode)).join("")
+    : `<p class="hold">${L.adds_left === 0 ? "No adds left this week." : L.mode === "next_week" ? "Nobody available beats your roster for next week." : "Hold. No available player raises your win chance by 1% or more."}</p>`;
+  const il = L.il_moves.map((s) => `<li>Move <b>${esc(s)}</b> to IL. Frees a spot without a drop.</li>`).join("");
+  const list = (title, items) => items ? `<h2>${title}</h2><ul class="plain">${items}</ul>` : "";
+  return `<div class="board">
+    <div class="head">
+      <div><div class="teams"><b>${esc(L.league)}</b> vs ${esc(L.opponent)}</div>
+        <div class="score num">${L.score[0]}<span class="d">–</span>${L.score[1]}</div></div>
+      <div class="win num"><span class="pct">${pct(L.win)}</span><small>to win the week</small></div>
+      <div class="facts">${L.days_left} days left. Games left: you ${L.my_games}, them ${L.opp_games}.${L.opp_expected_adds ? ` Counting ${L.opp_expected_adds} more add${L.opp_expected_adds > 1 ? "s" : ""} by them.` : ""}</div>
+    </div>
+    ${L.mode === "next_week" ? `<div class="dead">This week is out of reach. Moves below set up next week.</div>` : ""}
+    <div class="legend"><span class="y">You</span><span>Projected end of week</span><span class="t">Them</span></div>
+    ${cats}
+  </div>
+  <h2>Moves<span class="sub">${L.adds_left} of ${L.max_adds} adds left</span></h2>
+  ${moves}
+  ${list("Roster", il)}
+  ${list("Today's lineup", L.lineup.map((s) => `<li>${esc(s)}</li>`).join(""))}
+  ${list("Injury news", L.injuries.map(injuryItem).join(""))}
+  ${list("Warnings", L.warnings.map((s) => `<li>${esc(s)}</li>`).join(""))}
+  ${list("Accounted for", (L.notes || []).map((s) => `<li>${esc(s)}</li>`).join(""))}`;
+}
+
+function render(doc) {
+  const when = new Date(doc.generated_at);
+  $("#stamp").textContent = "Updated " + when.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+  let current = 0;
+  try { current = Math.min(+localStorage.getItem("tab") || 0, doc.leagues.length - 1); } catch (e) {}
+  const tabs = $("#tabs");
+  tabs.innerHTML = doc.leagues.map((L, i) =>
+    `<button class="tab" role="tab" data-i="${i}">${esc(L.league)}<span class="tw">${pct(L.win)}</span></button>`).join("");
+  const show = (i) => {
+    current = i;
+    tabs.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", +b.dataset.i === i));
+    $("#view").innerHTML = league(doc.leagues[i]);
+    try { localStorage.setItem("tab", i); } catch (e) {}
+  };
+  tabs.addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) show(+b.dataset.i); });
+  show(current);
+}
+
+fetch("report.json", { cache: "no-store" })
+  .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(render)
+  .catch(() => { $("#view").innerHTML = `<p class="empty">No report yet. It appears after the next daily run at 3 PM Manila time.</p>`; });
+</script>
+</body>
+</html>

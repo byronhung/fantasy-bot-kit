@@ -1,0 +1,52 @@
+name: injury watch
+# Every 20 min, 00:00-05:40 UTC = 08:00-13:40 Manila (US game nights). With the Cloudflare
+# timer (repo variable CF_TIMER = on) the Worker starts it on time and GitHub's schedule is
+# skipped; without it GitHub's schedule runs it (far less often than asked, but it works).
+# ESPN injury feed only: no Yahoo login, no browser. Uses the roster the daily report cached,
+# and remembers the last news item seen per player, so nothing slips between runs.
+
+on:
+  schedule:
+    - cron: "*/20 0-5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: watch
+
+jobs:
+  watch:
+    if: github.event_name != 'schedule' || vars.CF_TIMER != 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Restore roster from the last daily report
+        uses: actions/cache/restore@v4
+        with:
+          path: data/roster.json
+          key: roster-latest
+          restore-keys: roster-
+      - name: Restore what we've already alerted on
+        uses: actions/cache/restore@v4
+        with:
+          path: data/watch_seen.json
+          key: watch-seen-latest
+          restore-keys: watch-seen-
+      - name: Install
+        run: uv sync
+      - name: Watch injuries
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          REPORT_URL: ${{ secrets.REPORT_URL }}
+          FBOT_LEAGUES: ${{ vars.LEAGUES }}
+          PYTHONIOENCODING: utf-8
+        run: uv run python -m fantasy_bot.run --mode watch
+      - name: Remember what we alerted on
+        if: success() && hashFiles('data/watch_seen.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: data/watch_seen.json
+          key: watch-seen-${{ github.run_id }}

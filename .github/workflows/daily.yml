@@ -1,0 +1,135 @@
+name: daily report
+# Reads both Yahoo leagues, projects the week, publishes the dashboard, pushes a one-line summary.
+# Timing: triggered at 07:00 UTC (15:00 Manila) by the Cloudflare Worker in cloudflare/.
+# The GitHub schedule below is only a fallback: GitHub delays it by hours on quiet repos.
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+    inputs:
+      send:
+        description: "Send the push notification"
+        type: boolean
+        default: true
+
+concurrency:
+  group: daily-${{ github.event_name == 'schedule' && 'fallback' || 'main' }}
+
+permissions:
+  contents: write   # push report.json to the "report" branch
+  actions: read     # the fallback gate lists today's runs
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Skip the fallback if today's report already ran
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            n=$(gh run list -R "${{ github.repository }}" -w "daily report" -e workflow_dispatch -s success \
+                --created ">=$(date -u +%Y-%m-%d)" --json databaseId -q 'length')
+            if [ "$n" != "0" ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; echo "Already ran today."; fi
+          fi
+
+      - name: Install
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          uv sync
+          uv run playwright install --with-deps chromium
+
+      - name: Restore prediction log
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: data/predictions
+          key: predictions-latest
+          restore-keys: predictions-
+
+      - name: Run bot
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          YAHOO_STATE: ${{ secrets.YAHOO_STATE }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          REPORT_URL: ${{ secrets.REPORT_URL }}
+          FBOT_LEAGUES: ${{ vars.LEAGUES }}
+          PYTHONIOENCODING: utf-8
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.send }}" = "false" ]; then
+            uv run python -m fantasy_bot.run --no-send
+          else
+            uv run python -m fantasy_bot.run
+          fi
+
+      # The dashboard Worker reads report.json from this branch (one file, history overwritten).
+      - name: Publish report for the dashboard
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          tmp=$(mktemp -d) && cp site/report.json "$tmp/" && cd "$tmp"
+          git init -q -b report && git add report.json
+          git -c user.name="fantasy-bot" -c user.email="fantasy-bot@users.noreply.github.com" commit -q -m "report $(date -u +%FT%RZ)"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" report:report
+
+      # If the Cloudflare timer's GitHub token expired, the lineup/injury jobs silently stop
+      # (GitHub's own timers are off). This run still happens via the fallback, so warn here.
+      - name: Check the Cloudflare timer is still firing
+        if: steps.gate.outputs.skip != 'true' && vars.CF_TIMER == 'on'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          since=$(date -u -d '26 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          n=0
+          for wf in check.yml watch.yml; do
+            c=$(gh run list -R "${{ github.repository }}" -w "$wf" -e workflow_dispatch \
+                  --created ">=$since" --json databaseId -q 'length')
+            n=$((n + c))
+          done
+          if [ "$n" = "0" ]; then
+            curl -s -H "Title: Fantasy bot: timer stopped" -H "Tags: warning" \
+              -d "Lineup and injury alerts haven't run in a day. The Cloudflare timer's GitHub token probably expired. Open Claude Code in the bot folder and ask it to renew the GH_TOKEN." \
+              "https://ntfy.sh/$NTFY_TOPIC"
+          fi
+
+      - name: Cache roster for the injury watch
+        if: success() && steps.gate.outputs.skip != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/roster.json
+          key: roster-${{ github.run_id }}
+
+      - name: Save prediction log
+        if: success() && steps.gate.outputs.skip != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/predictions
+          key: predictions-${{ github.run_id }}
+
+      - name: Push a failure notice
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          curl -s -H "Title: Fantasy bot: daily report failed" -H "Tags: warning" \
+            -H "Click: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d "Today's report didn't go out. Tap to see the run log." "https://ntfy.sh/$NTFY_TOPIC"
+
+      # Logged-in Yahoo pages can carry session tokens: keep them only when a run
+      # fails (to replay the bug), in this private repo, for 7 days.
+      - name: Save Yahoo snapshots (failed runs only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots-${{ github.run_id }}
+          path: data/raw/
+          retention-days: 7

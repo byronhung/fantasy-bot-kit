@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+secrets/
+data/raw/
+data/logs/
+.pytest_cache/
+site/report.json
+data/predictions/
+data/watch_seen.json
+data/roster.json
+cloudflare/.wrangler/
+.wrangler/
+leagues.json
